@@ -28,27 +28,78 @@ public class AuthenticationController {
     @Autowired
     UserRepository userRepository;
 
-    @GetMapping("/login")
-    public ResponseEntity<String> authenticateUser(@RequestBody User requestedUser) throws Exception {
+    @GetMapping("/")
+    public ResponseEntity<Object> getAllUsers() {
         try {
             List<User> allUsers = userRepository.findAll();
-            //checks if fetched users does NOT contains an object with requestetUser.getUsername
-            if (allUsers.stream().noneMatch(object -> object.getUsername().equals(requestedUser.getUsername())))
-                return ResponseEntity.status(HttpStatus.NOT_FOUND).body("HTTP 404: Resource not found");
-
-            for (User current : allUsers) {
-                if (current.getUsername().equals(requestedUser.getUsername())) {
-                    if (BCrypt.checkpw(requestedUser.getPassword(), current.getPassword())) return ResponseEntity.status(HttpStatus.OK).body("HTTP 200 OK: The server successfully processed the request");
-                    return ResponseEntity.status(HttpStatus.FORBIDDEN).body("HTTP 403: Cannot access the requested resource");
-                }
-            }
-
-            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body("HTTP 400 Bad request: The request is incorrect or corrupt, and the server can't understand it.");
+            if (allUsers.isEmpty()) return new ResponseEntity<>("Resource not found" + allUsers, HttpStatus.valueOf(404));
+            return new ResponseEntity<>(allUsers, HttpStatus.valueOf(200));
         } catch (Exception exception) {
-            return ResponseEntity.status(HttpStatus.EXPECTATION_FAILED).body("HTTP 417 Expectation: The expectation given in the request's Expect header could not be met." + exception);
+            if (exception.toString().contains("could not extract ResultSet")) return new ResponseEntity<>(exception, HttpStatus.valueOf(500));
+            return new ResponseEntity<>(exception, HttpStatus.valueOf(403));
         }
     }
 
+    @GetMapping("/{userId}")
+    public ResponseEntity<Object> retrieveUser(@PathVariable int userId) {
+        try {
+            Optional<User> fetchedUser = userRepository.findById(userId);
+
+            if (fetchedUser.isEmpty()) return new ResponseEntity<>("Resource not found" + fetchedUser, HttpStatus.valueOf(404));
+
+            EntityModel<User> resource = EntityModel.of(fetchedUser.get());
+            WebMvcLinkBuilder linkTo = linkTo(methodOn(this.getClass()).getAllUsers());
+            resource.add(linkTo.withRel("all-users"));
+
+            Link selfLink = linkTo(methodOn(this.getClass()).retrieveUser(userId)).withSelfRel();
+            resource.add(selfLink);
+
+            return new ResponseEntity<>("Resource successfully fetched" + resource, HttpStatus.valueOf(200));
+
+        } catch (Exception exception) {
+            if (exception.toString().contains("could not extract ResultSet")) return new ResponseEntity<>("Internal Server Error: \n" + exception, HttpStatus.valueOf(500));
+            return new ResponseEntity<>("The expectation given in the request's Expect header could not be met: \n" + exception, HttpStatus.valueOf(417));
+        }
+
+    }
+
+    @GetMapping("/login")
+    public ResponseEntity<Object> authenticateUser(@RequestBody User requestedUser) throws Exception {
+        try {
+            List<User> allUsers = userRepository.findAll();
+            //checks if fetched users does NOT contains an object with requestedUser.getUsername
+            if (allUsers.stream().noneMatch(object -> object.getUsername().equals(requestedUser.getUsername())))
+                return new ResponseEntity<>("Resource not found", HttpStatus.valueOf(404));
+
+            for (User current : allUsers) {
+                if (current.getUsername().equals(requestedUser.getUsername())) {
+                    if (BCrypt.checkpw(requestedUser.getPassword(), current.getPassword())) return new ResponseEntity<>("Login validated", HttpStatus.valueOf(200));
+                    return new ResponseEntity<>("Cannot access the requested resource", HttpStatus.valueOf(403));
+                }
+            }
+
+            return new ResponseEntity<>("The request is incorrect or corrupt, and the server can't understand it.", HttpStatus.valueOf(400));
+        } catch (Exception exception) {
+            if (exception.toString().contains("could not extract ResultSet")) return new ResponseEntity<>("Internal Server Error: \n" + exception, HttpStatus.valueOf(500));
+            return new ResponseEntity<>("The expectation given in the request's Expect header could not be met" + exception, HttpStatus.valueOf(417));
+        }
+    }
+
+
+    @PostMapping("/register")
+    public ResponseEntity<Object> createNewUser(@RequestBody User requestedUser) {
+        try {
+            requestedUser.setPassword(BCrypt.hashpw(requestedUser.getPassword(), BCrypt.gensalt(10)));
+            User newUser = userRepository.save(requestedUser);
+
+            URI location = ServletUriComponentsBuilder.fromCurrentRequest().path("/{id}").buildAndExpand(newUser.getUserId()).toUri();
+
+            return new ResponseEntity<>("The user is created" + location, HttpStatus.valueOf(201));
+        } catch (Exception exception) {
+            if (exception.toString().contains("could not extract ResultSet")) return new ResponseEntity<>("Internal Server Error: \n" + exception, HttpStatus.valueOf(500));
+            return new ResponseEntity<>("The expectation given in the request's Expect header could not be met" + exception, HttpStatus.valueOf(417));
+        }
+    }
 
 
     @PutMapping("/updateUserById/{userId}")
@@ -61,42 +112,30 @@ public class AuthenticationController {
             changedUser.setPassword(BCrypt.hashpw(requestedUser.getPassword(), BCrypt.gensalt(10)));
 
             userRepository.save(changedUser);
-
-            return ResponseEntity.status(HttpStatus.ACCEPTED).body("HTTP 204 No Content: The server successfully processed the request, but is not returning any content");
+            return new ResponseEntity<>("The server successfully processed the request, but is not returning any content", HttpStatus.valueOf(204));
         } catch (Exception exception) {
-            return ResponseEntity.status(HttpStatus.EXPECTATION_FAILED).body("HTTP 417 Expectation: The expectation given in the request's Expect header could not be met." + exception);
+            if (exception.toString().contains("could not extract ResultSet")) return new ResponseEntity<>("Internal Server Error: \n" + exception, HttpStatus.valueOf(500));
+            return new ResponseEntity<>("The expectation given in the request's Expect header could not be met" + exception, HttpStatus.valueOf(417));
         }
     }
 
-    @PostMapping("/register")
-    public ResponseEntity<Object> createNewUser(@RequestBody User requestedUser) {
-        try {
-            requestedUser.setPassword(BCrypt.hashpw(requestedUser.getPassword(), BCrypt.gensalt(10)));
-            User newUser = userRepository.save(requestedUser);
-
-            URI location = ServletUriComponentsBuilder.fromCurrentRequest().path("/{id}").buildAndExpand(newUser.getUserId()).toUri();
-
-            return ResponseEntity.status(HttpStatus.CREATED).body("HTTP 201: User is created " + location);
-        } catch (Exception exception) {
-            return ResponseEntity.status(HttpStatus.EXPECTATION_FAILED).body("HTTP 417 Expectation: The expectation given in the request's Expect header could not be met." + exception); //Todo: fix path
-        }
-    }
 
     @DeleteMapping("/deleteUser/{userId}")
     public ResponseEntity<String> deleteExistingUser(@PathVariable int userId) {
         try {
             User fetchedUser = userRepository.findById(userId).orElse(null);
-            if (fetchedUser == null) return ResponseEntity.status(HttpStatus.NOT_FOUND).body("HTTP 404: Resource not found"); //Todo: User not found error
+            if (fetchedUser == null) return ResponseEntity.status(HttpStatus.NOT_FOUND).body("HTTP 404: Resource not found");
 
             userRepository.delete(fetchedUser);
 
-            return ResponseEntity.status(HttpStatus.OK).body("HTTP 200 OK: Resource successfully deleted");
+            return new ResponseEntity<>("Resource successfully deleted", HttpStatus.valueOf(200));
         } catch (Exception exception) {
-            return ResponseEntity.status(HttpStatus.EXPECTATION_FAILED).body("HTTP 417 Expectation: The expectation given in the request's Expect header could not be met." + exception); //Todo: fix path
+            if (exception.toString().contains("could not extract ResultSet")) return new ResponseEntity<>("Internal Server Error: \n" + exception, HttpStatus.valueOf(500));
+            return new ResponseEntity<>("The expectation given in the request's Expect header could not be met" + exception, HttpStatus.valueOf(417));
         }
     }
-
 }
+
 
 
 
