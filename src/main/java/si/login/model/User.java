@@ -17,5 +17,8 @@ public class User {
     private String username;
     private String password;
 
-
+    @Override
+    public String toString() {
+        return "{\"userId\": \""+userId+"\", \"username\": \""+username+"\", \"password\": \""+password+"\"}";
+    }
 }

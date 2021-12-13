@@ -70,7 +70,7 @@ public class UserController {
 
             changedUser.setUsername(requestedUser.getUsername());
             changedUser.setPassword(BCrypt.hashpw(requestedUser.getPassword(), BCrypt.gensalt(10)));
-
+            kafkaService.sendUpdateUserTopic(changedUser);
             userRepository.save(changedUser);
             return new ResponseEntity<>("The server successfully processed the request, but is not returning any content", HttpStatus.valueOf(204));
         } catch (Exception exception) {
@@ -87,7 +87,7 @@ public class UserController {
             if (fetchedUser == null) return ResponseEntity.status(HttpStatus.NOT_FOUND).body("HTTP 404: Resource not found");
 
             userRepository.delete(fetchedUser);
-
+            kafkaService.sendDeleteUserTopic(fetchedUser);
             return new ResponseEntity<>("Resource successfully deleted", HttpStatus.valueOf(200));
         } catch (Exception exception) {
             if (exception.toString().contains("could not extract ResultSet")) return new ResponseEntity<>("Internal Server Error: \n" + exception, HttpStatus.valueOf(500));

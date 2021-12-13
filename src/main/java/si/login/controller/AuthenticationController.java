@@ -16,6 +16,7 @@ import static org.springframework.hateoas.server.mvc.WebMvcLinkBuilder.linkTo;
 import static org.springframework.hateoas.server.mvc.WebMvcLinkBuilder.methodOn;
 
 import org.springframework.security.crypto.bcrypt.BCrypt;
+import si.login.service.KafkaService;
 
 import java.net.URI;
 import java.util.List;
@@ -28,6 +29,9 @@ public class AuthenticationController {
     @Autowired
     UserRepository userRepository;
 
+    @Autowired
+    KafkaService kafkaService;
+
     @GetMapping("/login")
     public ResponseEntity<Object> authenticateUser(@RequestBody User requestedUser) throws Exception {
         try {
@@ -38,7 +42,11 @@ public class AuthenticationController {
 
             for (User current : allUsers) {
                 if (current.getUsername().equals(requestedUser.getUsername())) {
-                    if (BCrypt.checkpw(requestedUser.getPassword(), current.getPassword())) return new ResponseEntity<>("Login validated", HttpStatus.valueOf(200));
+                    if (BCrypt.checkpw(requestedUser.getPassword(), current.getPassword())) {
+                        System.out.println(current.toString());
+                        kafkaService.sendUserLoginTopic(current);
+                        return new ResponseEntity<>("Login validated", HttpStatus.valueOf(200));
+                    }
                     return new ResponseEntity<>("Cannot access the requested resource", HttpStatus.valueOf(403));
                 }
             }
@@ -56,9 +64,8 @@ public class AuthenticationController {
         try {
             requestedUser.setPassword(BCrypt.hashpw(requestedUser.getPassword(), BCrypt.gensalt(10)));
             User newUser = userRepository.save(requestedUser);
-
             URI location = ServletUriComponentsBuilder.fromCurrentRequest().path("/{id}").buildAndExpand(newUser.getUserId()).toUri();
-
+            kafkaService.sendCreateUserTopic(newUser);
             return new ResponseEntity<>("The user is created" + location, HttpStatus.valueOf(201));
         } catch (Exception exception) {
             if (exception.toString().contains("could not extract ResultSet")) return new ResponseEntity<>("Internal Server Error: \n" + exception, HttpStatus.valueOf(500));
