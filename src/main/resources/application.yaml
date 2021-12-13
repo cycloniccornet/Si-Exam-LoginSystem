@@ -1,0 +1,9 @@
+spring:
+  datasource:
+    url: jdbc:mysql://127.0.0.1:3306/users
+    username: test1234
+    password: test1234
+  application:
+    name: Si-Exam-LoginSystem
+server:
+  port: 8086
