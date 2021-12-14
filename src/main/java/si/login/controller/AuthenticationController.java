@@ -22,7 +22,7 @@ public class AuthenticationController {
     LoginService loginService;
 
     @GetMapping("/login")
-    public Object authenticateUser(@RequestBody User requestedUser) throws Exception {
+    public Object authenticateUser(@RequestBody User requestedUser) {
             return loginService.valdiateLogin(requestedUser);
     }
 

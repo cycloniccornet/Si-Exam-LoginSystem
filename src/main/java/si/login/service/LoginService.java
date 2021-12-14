@@ -15,6 +15,11 @@ import java.util.List;
 @Service
 public class LoginService {
 
+    JsonConverter converter = new JsonConverter();
+
+    @Autowired
+    KafkaService kafkaService;
+
     @Autowired
     UserRepository userRepository;
 
@@ -28,8 +33,10 @@ public class LoginService {
 
             for (User current : allUsers) {
                 if (current.getUsername().equals(requestedUser.getUsername())) {
-                    if (BCrypt.checkpw(requestedUser.getPassword(), current.getPassword()))
+                    if (BCrypt.checkpw(requestedUser.getPassword(), current.getPassword())) {
+                        kafkaService.sendUserTopic(converter.userToJson(current, "login"));
                         return new ResponseEntity<>("Login validated", HttpStatus.valueOf(200));
+                    }
                     return new ResponseEntity<>("Cannot access the requested resource", HttpStatus.valueOf(403));
                 }
             }
@@ -45,7 +52,7 @@ public class LoginService {
         try {
             requestedUser.setPassword(BCrypt.hashpw(requestedUser.getPassword(), BCrypt.gensalt(10)));
             User newUser = userRepository.save(requestedUser);
-
+            kafkaService.sendUserTopic(converter.userToJson(newUser, "create"));
             URI location = ServletUriComponentsBuilder.fromCurrentRequest().path("/{id}").buildAndExpand(newUser.getUserId()).toUri();
 
             return new ResponseEntity<>("The user is created" + location, HttpStatus.valueOf(201));

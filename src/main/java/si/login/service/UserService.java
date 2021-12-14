@@ -20,6 +20,8 @@ import static org.springframework.hateoas.server.mvc.WebMvcLinkBuilder.methodOn;
 @Service
 public class UserService {
 
+    JsonConverter converter = new JsonConverter();
+
     @Autowired
     UserRepository userRepository;
 
@@ -41,7 +43,7 @@ public class UserService {
     public ResponseEntity<Object> getUserById(int userId) {
         try {
             Optional<User> fetchedUser = userRepository.findById(userId);
-
+            System.out.println(userRepository.findById(userId));
             if (fetchedUser.isEmpty()) return new ResponseEntity<>("Resource not found" + fetchedUser, HttpStatus.valueOf(404));
 
             EntityModel<User> resource = EntityModel.of(fetchedUser.get());
@@ -67,7 +69,8 @@ public class UserService {
 
             changedUser.setUsername(requestedUser.getUsername());
             changedUser.setPassword(BCrypt.hashpw(requestedUser.getPassword(), BCrypt.gensalt(10)));
-            kafkaService.sendUpdateUserTopic(changedUser);
+
+            kafkaService.sendUserTopic(converter.userToJson(changedUser, "update"));
             userRepository.save(changedUser);
             return new ResponseEntity<>("The server successfully processed the request, but is not returning any content", HttpStatus.valueOf(204));
         } catch (Exception exception) {
@@ -83,7 +86,7 @@ public class UserService {
             if (fetchedUser == null) return ResponseEntity.status(HttpStatus.NOT_FOUND).body("HTTP 404: Resource not found");
 
             userRepository.delete(fetchedUser);
-            kafkaService.sendDeleteUserTopic(fetchedUser);
+            kafkaService.sendUserTopic(converter.userToJson(fetchedUser, "delete"));
             return new ResponseEntity<>("Resource successfully deleted", HttpStatus.valueOf(200));
         } catch (Exception exception) {
             if (exception.toString().contains("could not extract ResultSet")) return new ResponseEntity<>("Internal Server Error: \n" + exception, HttpStatus.valueOf(500));
