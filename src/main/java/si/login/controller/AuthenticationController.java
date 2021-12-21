@@ -26,14 +26,8 @@ public class AuthenticationController {
             return loginService.valdiateLogin(requestedUser);
     }
 
-
     @PostMapping("/register")
     public Object createNewUser(@RequestBody User requestedUser) {
        return loginService.registerUser(requestedUser);
     }
 }
-
-
-
-
-

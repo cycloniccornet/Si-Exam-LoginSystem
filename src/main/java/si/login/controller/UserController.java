@@ -39,11 +39,8 @@ public class UserController {
 
     @PutMapping("/{userId}")
     public ResponseEntity<String> updateExistingUser(@PathVariable int userId, @RequestBody User requestedUser) {
-        JSONObject object = converter.userToJson(requestedUser, "update");
-        kafkaService.sendUserTopic(object);
         return userService.updateExistingUser(userId, requestedUser);
     }
-
 
     @DeleteMapping("/{userId}")
     public ResponseEntity<String> deleteExistingUser(@PathVariable int userId) {
